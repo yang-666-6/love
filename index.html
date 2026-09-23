@@ -28,7 +28,6 @@
             border-radius: 6px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.25);
         }
-        /* 手机屏幕缩小卡片尺寸 */
         @media (max-width: 480px) {
             .tip-box {
                 width: 120px;
@@ -47,28 +46,33 @@ const colors = ["pink", "lightblue", "lightgreen", "lemonchiffon",
 
 let boxes = [];
 
-// 生成爱心坐标，等比例缩放，手机竖屏不会变形
+// 【重点修复】分开X、Y缩放，保证爱心不会压扁拉长
 function heart_points(n, screen_w, screen_h){
     const points = [];
-    const baseScale = Math.min(screen_w, screen_h) / 600;
-    // 手机小屏幕进一步缩小缩放系数
-    const scaleFactor = screen_w < 480 ? baseScale * 0.8 : baseScale;
+    // 限定爱心最大可用区域，强制爱心保持比例
+    const maxSize = Math.min(screen_w, screen_h) * 0.75;
+    const scale = maxSize / 36;
+
+    const boxW = screen_w < 480 ? 120 : 150;
+    const boxH = screen_w < 480 ? 50 : 60;
+
     for(let i=0;i<n;i++){
         const t = i / n * 2 * Math.PI;
         const x = 16 * Math.sin(t)**3;
         const y = 13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t);
-        let boxW = screen_w < 480 ? 120 :150;
-        let boxH = screen_w < 480 ? 50 :60;
-        let sx = screen_w / 2 + x * 20 * scaleFactor - boxW/2;
-        let sy = screen_h / 2 - y * 20 * scaleFactor - boxH/2;
-        sx = Math.max(0, Math.min(sx, screen_w - boxW));
-        sy = Math.max(0, Math.min(sy, screen_h - boxH));
-        points.push([sx, sy]);
+
+        // 分别缩放x,y，保持爱心原始比例
+        let px = screen_w / 2 + x * scale - boxW/2;
+        let py = screen_h / 2 - y * scale - boxH/2;
+
+        px = Math.max(0, Math.min(px, screen_w - boxW));
+        py = Math.max(0, Math.min(py, screen_h - boxH));
+        points.push([px, py]);
     }
     return points;
 }
 
-// 创建弹窗盒子
+// 创建卡片
 function createPopup(x,y,tipText){
     const div = document.createElement("div");
     div.className = "tip-box";
@@ -80,77 +84,65 @@ function createPopup(x,y,tipText){
     document.body.appendChild(div);
     boxes.push(div);
 
-    //电脑：空格键关闭卡片
-    const keyClose = (e)=>{
-        if(e.code === 'Space'){
+    //电脑空格关闭
+    const keyEvt = (e)=>{
+        if(e.code === "Space"){
             div.remove();
-            window.removeEventListener('keydown', keyClose);
+            window.removeEventListener("keydown", keyEvt);
         }
     }
-    window.addEventListener('keydown', keyClose);
-
-    //手机：点击卡片直接关闭（适配触屏）
-    div.addEventListener('click', ()=>{
-        div.remove();
-    })
+    window.addEventListener("keydown", keyEvt);
+    //手机点击关闭卡片
+    div.onclick = ()=> div.remove();
     return div;
 }
 
-// 延时函数
 function sleep(ms){
-    return new Promise(resolve=>setTimeout(resolve,ms));
+    return new Promise(resolve=>setTimeout(resolve, ms));
 }
 
 async function run(){
-    // 修正手机视口高度，排除浏览器地址栏
     const sw = document.documentElement.clientWidth;
     const sh = document.documentElement.clientHeight;
     boxes = [];
     document.body.innerHTML = "";
 
-    // 阶段一：爱心轨迹依次弹出
+    //阶段1：爱心成型
     const points = heart_points(100, sw, sh);
-    for(let i=0;i<points.length;i++){
+    for(let i=0; i<points.length; i++){
         const [x,y] = points[i];
-        const text = i === points.length-1 ? "我喜欢你" : null;
-        createPopup(x,y,text);
+        const txt = i === points.length-1 ? "我喜欢你" : null;
+        createPopup(x,y,txt);
         await sleep(30);
     }
 
     await sleep(1000);
-    // 清空爱心阶段弹窗
-    for(let el of boxes){
-        el.remove();
-    }
+    //清除爱心卡片
+    for(let el of boxes) el.remove();
     boxes = [];
 
-    // 阶段二：满屏随机弹窗
+    //阶段2：随机铺满屏幕
     const boxW = sw <480 ?120:150;
     const boxH = sw <480 ?50:60;
     const count = Math.floor((sw / boxW) * (sh / boxH)) + 50;
-    for(let i=0;i<count;i++){
-        const x = Math.floor(Math.random() * (sw - boxW));
-        const y = Math.floor(Math.random() * (sh - boxH));
-        createPopup(x,y);
+    for(let i=0; i<count; i++){
+        const rx = Math.floor(Math.random() * (sw - boxW));
+        const ry = Math.floor(Math.random() * (sh - boxH));
+        createPopup(rx, ry);
         await sleep(5);
     }
 
-    // 等待10秒
     await sleep(10000);
-
-    // 阶段三：逐个优雅关闭弹窗
-    const interval = 1000 / boxes.length;
+    //阶段3：逐个消失
+    const stepTime = 1000 / boxes.length;
     for(let el of boxes){
         el.remove();
-        await sleep(interval);
+        await sleep(stepTime);
     }
 }
 
-// 屏幕旋转自动重跑动画
-window.addEventListener('resize', ()=>{
-    run();
-})
-
+// 屏幕尺寸变化重跑
+window.addEventListener('resize', ()=> run());
 run();
 </script>
 </body>
